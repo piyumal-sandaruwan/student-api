@@ -1,87 +1,56 @@
-# Local + Local vs Local + Remote
+# Student Management REST API
 
-## 1. Local + Local
+A simple Student Management REST API built with **Spring Boot, Java, Maven, Spring Data JPA, and MySQL**.
 
-The Spring Boot application and MySQL database both run on the developer's computer.
-
-**Concept:**
-
-Application → Local MySQL
-
-This is commonly used during local development.
+This project focuses on building a clean backend REST API with CRUD operations, validation, exception handling, database persistence, and automated testing.
 
 ---
 
-## 2. Local + Remote
+## Table of Contents
 
-The Spring Boot application runs on the developer's computer, while the MySQL database runs on a remote server such as AWS EC2.
-
-**Concept:**
-
-Application → Network → Remote MySQL
-
-The application communicates with the remote database using the database server's host and port.
-
----
-
-## 3. Remote + Remote
-
-In a production-style setup, both the Spring Boot application and MySQL database can run on a remote server.
-
-**Concept:**
-
-Remote Spring Boot → Remote MySQL
-
-When both services are on the same server, the application can communicate with the database locally on that server.
+1. [Project Overview](#1-project-overview)
+2. [Technology Stack](#2-technology-stack)
+3. [Project Structure](#3-project-structure)
+4. [API Specification](#4-api-specification)
+5. [Prerequisites](#5-prerequisites)
+6. [Database Setup](#6-database-setup)
+7. [Configuration](#7-configuration)
+8. [Running the Application](#8-running-the-application)
+9. [Testing](#9-testing)
+10. [Building the Application](#10-building-the-application)
+11. [Running the JAR](#11-running-the-jar)
+12. [Future DevOps Integration](#12-future-devops-integration)
 
 ---
 
-## Why This Is Useful
+## 1. Project Overview
 
-The important idea is that the application and database do not have to run on the same machine.
+`student-api` is a backend REST API for managing student records.
 
-The database location can be changed through configuration without changing the application's business logic.
+The application provides basic CRUD operations:
 
-For example:
+- Create students
+- Retrieve students
+- Update students
+- Delete students
+- Validate request data
+- Handle application exceptions
+- Persist data using MySQL
+- Run automated tests using H2
 
-- Local environment → local database
-- Development environment → remote development database
-- Production environment → production database
+### Application Architecture
 
-The same Spring Boot application can therefore work with different databases depending on the environment.
-
----
-
-## Benefits
-
-- Develop the application locally while using a remote server database.
-- Keep local, development, and production environments separate.
-- Multiple developers can work with a shared development database.
-- Learn the real client-server and database networking model.
-- Move an application between environments without changing its core code.
-- Makes environment-based configuration easier for DevOps and CI/CD.
-- Helps separate application code from environment-specific database settings.
-
----
-
-## Key Concept
-
-**The application does not need to know where the database is permanently.**
-
-The database location is environment-specific.
-
-The same application can be connected to:
-
-**Local + Local**
-
-during development,
-
-**Local + Remote**
-
-when testing against a server database,
-
-and later **Remote + Remote**
-
-when the application is deployed to the server.
-
-This separation is one of the foundations of environment-based configuration and modern DevOps workflows.
+```text
+Client
+   │
+   ▼
+Controller
+   │
+   ▼
+Service
+   │
+   ▼
+Repository
+   │
+   ▼
+MySQL
