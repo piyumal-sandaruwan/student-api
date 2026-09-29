@@ -1,0 +1,168 @@
+# ===================================================================
+# GitLab CI/CD Pipeline for student-api
+# Stages: build -> test -> package -> docker -> deploy
+# ===================================================================
+
+stages:
+  - build
+  - test
+  - package
+  - docker
+  - deploy
+
+# Global cache for Maven dependencies to accelerate builds
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .m2/repository
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  IMAGE_NAME: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  IMAGE_LATEST: "$CI_REGISTRY_IMAGE:latest"
+
+# -------------------------------------------------------------------
+# 1. BUILD STAGE: Compile the application
+# -------------------------------------------------------------------
+build_app:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - echo "=== Starting Build Stage ==="
+    - mvn compile
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# -------------------------------------------------------------------
+# 2. TEST STAGE: Run automated unit & integration tests
+# -------------------------------------------------------------------
+run_tests:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - echo "=== Starting Test Stage ==="
+    - mvn test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# -------------------------------------------------------------------
+# 3. PACKAGE STAGE: Create executable JAR
+# -------------------------------------------------------------------
+package_jar:
+  stage: package
+  image: maven:3.9-eclipse-temurin-21
+  script:
+    - echo "=== Packaging Executable JAR ==="
+    - mvn package -DskipTests
+  artifacts:
+    name: "student-api-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - target/student-api-*.jar
+    expire_in: 1 week
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# -------------------------------------------------------------------
+# 4. DOCKER STAGE: Build and tag Docker image
+# -------------------------------------------------------------------
+build_docker_image:
+  stage: docker
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo "Logging into GitLab Container Registry..."
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - echo "=== Building Docker Image ==="
+    - echo "Building image: $IMAGE_NAME"
+    - docker build -t "$IMAGE_NAME" -t "$IMAGE_LATEST" .
+    - echo "Pushing image with commit SHA tag: $IMAGE_NAME"
+    - docker push "$IMAGE_NAME"
+    - docker push "$IMAGE_LATEST"
+  dependencies:
+    - package_jar
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# -------------------------------------------------------------------
+# 5. DEPLOY STAGE: Development Environment
+# Triggers automatically on push to 'develop' branch
+# -------------------------------------------------------------------
+deploy_to_development:
+  stage: deploy
+  image: alpine:latest
+  environment:
+    name: development
+    url: http://dev.example.com:8080
+  before_script:
+    - apk add --no-cache curl bash openssh-client
+  script:
+    - echo "=== Deploying to DEVELOPMENT Environment ==="
+    - echo "Target Profile: dev"
+    - echo "Docker Image: $IMAGE_NAME"
+    - echo "Database Host: ${DB_HOST:-mysql-dev.internal}"
+    - echo "Database Name: ${DB_NAME:-student_dev}"
+    - |
+      echo "Executing remote deployment commands on Dev server:"
+      echo "1. docker pull $IMAGE_NAME"
+      echo "2. docker stop student-api-dev || true"
+      echo "3. docker rm student-api-dev || true"
+      echo "4. docker run -d --name student-api-dev -p 8080:8080 \\"
+      echo "     -e SPRING_PROFILES_ACTIVE=dev \\"
+      echo "     -e DB_HOST=\"$DB_HOST\" \\"
+      echo "     -e DB_PORT=\"$DB_PORT\" \\"
+      echo "     -e DB_NAME=\"$DB_NAME\" \\"
+      echo "     -e DB_USERNAME=\"$DB_USERNAME\" \\"
+      echo "     -e DB_PASSWORD=\"[MASKED]\" \\"
+      echo "     $IMAGE_NAME"
+    - echo "=== Development deployment finished successfully ==="
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+# -------------------------------------------------------------------
+# 5. DEPLOY STAGE: Production Environment
+# Manual promotion trigger on push to 'main' branch
+# -------------------------------------------------------------------
+deploy_to_production:
+  stage: deploy
+  image: alpine:latest
+  environment:
+    name: production
+    url: http://prod.example.com:8080
+  before_script:
+    - apk add --no-cache curl bash openssh-client
+  script:
+    - echo "=== Deploying to PRODUCTION Environment ==="
+    - echo "Target Profile: prod"
+    - echo "Docker Image: $IMAGE_NAME"
+    - echo "Database Host: ${DB_HOST:-mysql-prod.internal}"
+    - echo "Database Name: ${DB_NAME:-student_prod}"
+    - |
+      echo "Executing remote deployment commands on Production server:"
+      echo "1. docker pull $IMAGE_NAME"
+      echo "2. docker stop student-api-prod || true"
+      echo "3. docker rm student-api-prod || true"
+      echo "4. docker run -d --name student-api-prod -p 8080:8080 --restart always \\"
+      echo "     -e SPRING_PROFILES_ACTIVE=prod \\"
+      echo "     -e DB_HOST=\"$DB_HOST\" \\"
+      echo "     -e DB_PORT=\"$DB_PORT\" \\"
+      echo "     -e DB_NAME=\"$DB_NAME\" \\"
+      echo "     -e DB_USERNAME=\"$DB_USERNAME\" \\"
+      echo "     -e DB_PASSWORD=\"[MASKED]\" \\"
+      echo "     $IMAGE_NAME"
+    - echo "=== Production deployment finished successfully ==="
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
